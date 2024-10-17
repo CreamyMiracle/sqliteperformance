@@ -5,107 +5,123 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.IO;
+using System.Reflection;
 
 namespace SQLitePerformance
 {
     internal class Program
     {
-        private static int _databaseSize = 20000;
-        private static int _operationCount = 500;
+        private static int _initSize = 10000;
+        private static int _operationCount = 100;
         private static int _currId = 0;
         private static List<string> _pragmas = new List<string>()
         {
-            //"PRAGMA journal_mode = OFF",
-            ////"PRAGMA journal_mode = MEMORY",
-            ////"PRAGMA journal_mode = WAL",
-            //"PRAGMA synchronous = OFF",
-            ////"PRAGMA synchronous = NORMAL",
-            //"PRAGMA locking_mode = EXCLUSIVE",
-            ////"PRAGMA locking_mode = NORMAL"
+            "PRAGMA journal_mode = OFF",
+            //"PRAGMA journal_mode = MEMORY",
+            //"PRAGMA journal_mode = WAL",
+
+            "PRAGMA synchronous = OFF",
+            //"PRAGMA synchronous = NORMAL",
+
+            "PRAGMA locking_mode = EXCLUSIVE",
+            //"PRAGMA locking_mode = NORMAL"
         };
 
-        private static ConcurrentDictionary<string, KeyValuePair<TimeSpan, List<string>>> _fastestOperation = new ConcurrentDictionary<string, KeyValuePair<TimeSpan, List<string>>>();
-
-        private static List<Func<SQLiteConnection, int, TimeSpan>> _funcs = new List<Func<SQLiteConnection, int, TimeSpan>>()
-        {
-            Insert,
-            InsertInTransaction,
-
-            InsertAll,
-            InsertAllInTransaction,
-
-            InsertOrReplace,
-            InsertOrReplaceInTransaction,
-
-            InsertOrReplaceAllWithChildren,
-            InsertOrReplaceAllWithChildrenInTransaction,
-        };
-
-        private static TimeSpan Run(SQLiteConnection con, int count, Func<SQLiteConnection, int, TimeSpan> func)
-        {
-            return func(con, count);
-        }
 
         static void Main(string[] args)
         {
-            IEnumerable<List<string>> pragmaCombinations = GetCombinations(_pragmas);
+
+            List<List<string>> pragmaCombinations = GetCombinations(_pragmas).ToList();
 
             foreach (var currPragmas in pragmaCombinations)
             {
                 var path = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString() + ".db");
+                Console.WriteLine(path);
+                Console.WriteLine(Environment.NewLine);
                 SQLiteConnection con = new SQLiteConnection(path);
                 foreach (string pragma in currPragmas)
                 {
+                    Console.WriteLine(pragma);
                     con.ExecuteScalar<string>(pragma);
                 }
 
-                foreach (Func<SQLiteConnection, int, TimeSpan> func in _funcs)
-                {
-                    string methodName = func.Method.Name.PadRight(50);
-                    ResetDatabase(con, _databaseSize);
-                    TimeSpan duration = func(con, _operationCount);
-                    Console.WriteLine(methodName + duration);
-                    CheckFastestOperation(methodName, currPragmas, duration);
-                }
+                bool logInits = false;
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(SearchTable, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(TX_SearchTable, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(SearchQuery, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(TX_SearchQuery, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(FindLoop, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(TX_FindLoop, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(Insert, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(TX_Insert, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(InsertOrReplace, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(TX_InsertOrReplace, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(InsertOrReplaceAllWithChildren, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(TX_InsertOrReplaceAllWithChildren, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(InsertAll, con);
+
+                LogStats(InitDatabase, con, logInits);
+                LogStats(TX_InsertAll, con);
 
                 con.Close();
             }
-
-            Console.WriteLine(Environment.NewLine);
-            List<string> keys = _fastestOperation.Keys.ToList();
-            keys.Sort();
-            Console.WriteLine("Fastest operations:");
-            foreach (var key in keys)
-            {
-                _fastestOperation.TryGetValue(key, out var value);
-                Console.WriteLine("Operation: " + key + "   Duration: " + value.Key.TotalMilliseconds);
-                List<string> sortedPragmas = value.Value;
-                sortedPragmas.Sort();
-                foreach (string pragma in sortedPragmas)
-                {
-                    Console.WriteLine("     Pragma: " + pragma);
-                }
-                Console.WriteLine(Environment.NewLine);
-            }
         }
 
-        private static void CheckFastestOperation(string operation, List<string> pragmas, TimeSpan duration)
+        private static double ConvertBytesToMegabytes(long bytes)
         {
-            if (_fastestOperation.TryGetValue(operation, out KeyValuePair<TimeSpan, List<string>> value))
+            return (bytes / 1024f) / 1024f;
+        }
+
+        private static void LogStats(Func<SQLiteConnection, int, TimeSpan> func, SQLiteConnection con, bool log = true)
+        {
+            string methodName = func.Method.Name.PadRight(40);
+            string msg = "";
+            string size = "";
+            try
             {
-                if (value.Key > duration)
-                {
-                    _fastestOperation[operation] = new KeyValuePair<TimeSpan, List<string>>(duration, new List<string>(pragmas));
-                }
+                TimeSpan duration = func(con, _operationCount);
+                msg = duration.TotalMilliseconds.ToString().PadRight(20);
+                size = "Bytes: " + Math.Round(ConvertBytesToMegabytes(new System.IO.FileInfo(con.DatabasePath).Length), 2).ToString() + "MB";
             }
-            else
+            catch (Exception ex)
             {
-                _fastestOperation.TryAdd(operation, new KeyValuePair<TimeSpan, List<string>>(duration, new List<string>(pragmas)));
+                msg = "ERROR";
+            }
+            if (log)
+            {
+                Console.WriteLine(methodName + msg + size);
             }
         }
 
         #region Functions
-        private static TimeSpan ResetDatabase(SQLiteConnection con, int count)
+        private static TimeSpan InitDatabase(SQLiteConnection con, int useless)
         {
             DateTime start = DateTime.Now;
             con.DropTable<Record>();
@@ -113,25 +129,24 @@ namespace SQLitePerformance
             List<Record> records = new List<Record>();
 
             _currId = 0;
-            for (int i = _currId; i < count; i++)
+            for (int i = _currId; i < _initSize; i++)
             {
-                records.Add(new Record { Id = i, Name = i.ToString() });
+                records.Add(new Record { Id = i, Name = i.ToString(), Prop1 = i.ToString(), Prop2 = i.ToString(), Prop3 = i.ToString(), Prop4 = i.ToString() });
             }
-
+            _currId = _initSize;
             con.InsertAll(records, runInTransaction: true);
 
             DateTime end = DateTime.Now;
             return end - start;
         }
 
-        private static TimeSpan SearchWithTable(SQLiteConnection con, int count)
+        private static TimeSpan SearchTable(SQLiteConnection con, int count)
         {
-            Random rnd = new Random();
             List<int> ids = new List<int>();
 
             for (int i = 0; i < count; i++)
             {
-                ids.Add(rnd.Next(0, _databaseSize));
+                ids.Add(i);
             }
 
             DateTime start = DateTime.Now;
@@ -140,14 +155,13 @@ namespace SQLitePerformance
             return end - start;
         }
 
-        private static TimeSpan SearchWithTableInTransaction(SQLiteConnection con, int count)
+        private static TimeSpan TX_SearchTable(SQLiteConnection con, int count)
         {
-            Random rnd = new Random();
             List<int> ids = new List<int>();
 
             for (int i = 0; i < count; i++)
             {
-                ids.Add(rnd.Next(0, _databaseSize));
+                ids.Add(i);
             }
 
             DateTime start = DateTime.Now;
@@ -159,10 +173,8 @@ namespace SQLitePerformance
             return end - start;
         }
 
-        private static TimeSpan SearchWithQuery(SQLiteConnection con, int count)
+        private static TimeSpan SearchQuery(SQLiteConnection con, int count)
         {
-            Random rnd = new Random();
-
             DateTime start = DateTime.Now;
             for (int i = 0; i < count; i++)
             {
@@ -172,10 +184,8 @@ namespace SQLitePerformance
             return end - start;
         }
 
-        private static TimeSpan SearchWithQueryInTransaction(SQLiteConnection con, int count)
+        private static TimeSpan TX_SearchQuery(SQLiteConnection con, int count)
         {
-            Random rnd = new Random();
-
             DateTime start = DateTime.Now;
             con.RunInTransaction(() =>
             {
@@ -188,31 +198,25 @@ namespace SQLitePerformance
             return end - start;
         }
 
-        private static TimeSpan SearchInLoop(SQLiteConnection con, int count)
+        private static TimeSpan FindLoop(SQLiteConnection con, int count)
         {
-            Random rnd = new Random();
-
             DateTime start = DateTime.Now;
             for (int i = 0; i < count; i++)
             {
-                int rndId = rnd.Next(0, _databaseSize);
-                con.Find<Record>(rndId);
+                con.Find<Record>(i);
             }
             DateTime end = DateTime.Now;
             return end - start;
         }
 
-        private static TimeSpan SearchInLoopInTransaction(SQLiteConnection con, int count)
+        private static TimeSpan TX_FindLoop(SQLiteConnection con, int count)
         {
-            Random rnd = new Random();
-
             DateTime start = DateTime.Now;
             con.RunInTransaction(() =>
             {
                 for (int i = 0; i < count; i++)
                 {
-                    int rndId = rnd.Next(0, _databaseSize);
-                    con.Find<Record>(rndId);
+                    con.Find<Record>(i);
                 }
             });
             DateTime end = DateTime.Now;
@@ -237,7 +241,7 @@ namespace SQLitePerformance
             return end - start;
         }
 
-        private static TimeSpan InsertInTransaction(SQLiteConnection con, int count)
+        private static TimeSpan TX_Insert(SQLiteConnection con, int count)
         {
             List<Record> records = new List<Record>();
             for (int i = _currId; i < _currId + count; i++)
@@ -276,7 +280,7 @@ namespace SQLitePerformance
             return end - start;
         }
 
-        private static TimeSpan InsertOrReplaceInTransaction(SQLiteConnection con, int count)
+        private static TimeSpan TX_InsertOrReplace(SQLiteConnection con, int count)
         {
             List<Record> records = new List<Record>();
             for (int i = _currId; i < _currId + count; i++)
@@ -312,7 +316,7 @@ namespace SQLitePerformance
             return end - start;
         }
 
-        private static TimeSpan InsertOrReplaceAllWithChildrenInTransaction(SQLiteConnection con, int count)
+        private static TimeSpan TX_InsertOrReplaceAllWithChildren(SQLiteConnection con, int count)
         {
             List<Record> records = new List<Record>();
             for (int i = _currId; i < _currId + count; i++)
@@ -345,7 +349,7 @@ namespace SQLitePerformance
             return end - start;
         }
 
-        private static TimeSpan InsertAllInTransaction(SQLiteConnection con, int count)
+        private static TimeSpan TX_InsertAll(SQLiteConnection con, int count)
         {
             List<Record> records = new List<Record>();
             for (int i = _currId; i < _currId + count; i++)

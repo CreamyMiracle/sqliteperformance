@@ -3101,19 +3101,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Rajala\\.nuget\\packages\\": {}
+    "C:\\Users\\JuhanaR\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Rajala\\source\\repos\\SQLitePerformance\\SQLitePerformance\\SQLitePerformance.csproj",
+      "projectUniqueName": "D:\\Dev\\sqliteperformance\\SQLitePerformance\\SQLitePerformance\\SQLitePerformance.csproj",
       "projectName": "SQLitePerformance",
-      "projectPath": "C:\\Users\\Rajala\\source\\repos\\SQLitePerformance\\SQLitePerformance\\SQLitePerformance.csproj",
-      "packagesPath": "C:\\Users\\Rajala\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Rajala\\source\\repos\\SQLitePerformance\\SQLitePerformance\\obj\\",
+      "projectPath": "D:\\Dev\\sqliteperformance\\SQLitePerformance\\SQLitePerformance\\SQLitePerformance.csproj",
+      "packagesPath": "C:\\Users\\JuhanaR\\.nuget\\packages\\",
+      "outputPath": "D:\\Dev\\sqliteperformance\\SQLitePerformance\\SQLitePerformance\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Rajala\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\JuhanaR\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
@@ -3170,7 +3170,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.300\\RuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.403\\RuntimeIdentifierGraph.json"
       }
     }
   },
